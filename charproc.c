@@ -2538,14 +2538,6 @@ v_write(int f, const Char *data, unsigned len)
 	    return;
 	}
     }
-    if_DEBUG({
-	fprintf(stderr, "v_write called with %d bytes (%ld left over)",
-		len, (long) (v_bufptr - v_bufstr));
-	if (len > 1 && len < 10)
-	    fprintf(stderr, " \"%.*s\"", len, (const char *) data);
-	fprintf(stderr, "\n");
-    });
-
     if (!FD_ISSET(f, &pty_mask)) {
 	IGNORE_RC(write(f, (const char *) data, (size_t) len));
 	return;
@@ -2565,10 +2557,6 @@ v_write(int f, const Char *data, unsigned len)
 	    if (v_bufstr != v_buffer) {
 		/* there is unused space, move everything down */
 		/* possibly overlapping memmove here */
-		if_DEBUG({
-		    fprintf(stderr, "moving data down %ld\n",
-			    (long) (v_bufstr - v_buffer));
-		});
 		memmove(v_buffer, v_bufstr, (size_t) (v_bufptr - v_bufstr));
 		v_bufptr -= v_bufstr - v_buffer;
 		v_bufstr = v_buffer;
@@ -2579,10 +2567,6 @@ v_write(int f, const Char *data, unsigned len)
 		unsigned size = (unsigned) (v_bufptr - v_buffer);
 		v_buffer = TypeRealloc(Char, size + len, v_buffer);
 		if (v_buffer) {
-		    if_DEBUG({
-			fprintf(stderr, "expanded buffer to %d\n",
-				size + len);
-		    });
 		    v_bufstr = v_buffer;
 		    v_bufptr = v_buffer + size;
 		    v_bufend = v_bufptr + len;
@@ -2624,18 +2608,8 @@ v_write(int f, const Char *data, unsigned len)
 				      : MAX_PTY_WRITE));
 	if (riten < 0)
 	{
-	    if_DEBUG({
-		perror("write");
-	    });
 	    riten = 0;
 	}
-	if_DEBUG({
-	    fprintf(stderr, "write called with %ld, wrote %d\n",
-		    ((long) ((v_bufptr - v_bufstr) <= MAX_PTY_WRITE)
-		     ? (long) (v_bufptr - v_bufstr)
-		     : MAX_PTY_WRITE),
-		    riten);
-	});
 	v_bufstr += riten;
 	if (v_bufstr >= v_bufptr)	/* we wrote it all */
 	    v_bufstr = v_bufptr = v_buffer;
@@ -2655,9 +2629,6 @@ v_write(int f, const Char *data, unsigned len)
 	    v_bufstr = v_buffer + start;
 	    v_bufptr = v_buffer + size;
 	    v_bufend = v_buffer + allocsize;
-	    if_DEBUG({
-		fprintf(stderr, "shrunk buffer to %d\n", allocsize);
-	    });
 	} else {
 	    /* should we print a warning if couldn't return memory? */
 	    v_buffer = v_bufstr - start;	/* restore clobbered pointer */

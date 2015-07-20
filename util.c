@@ -780,17 +780,6 @@ WriteText(XtermWidget xw, IChar *str, Cardinal len)
 	if (screen->cursor_state)
 	    HideCursor();
 
-	/*
-	 * If we overwrite part of a multi-column character, fill the rest
-	 * of it with blanks.
-	 */
-	if_OPT_WIDE_CHARS(screen, {
-	    int kl;
-	    int kr;
-	    if (DamagedCurCells(screen, cells, &kl, &kr))
-		ClearInLine(xw, screen->cur_row, kl, (unsigned) (kr - kl + 1));
-	});
-
 	if (attr_flags & INVISIBLE) {
 	    Cardinal n;
 	    for (n = 0; n < cells; ++n)
@@ -1069,25 +1058,6 @@ InsertChar(XtermWidget xw, unsigned n)
 	int col = right + 1 - (int) n;
 
 	/*
-	 * If we shift part of a multi-column character, fill the rest
-	 * of it with blanks.  Do similar repair for the text which will
-	 * be shifted into the right-margin.
-	 */
-	if_OPT_WIDE_CHARS(screen, {
-	    int kl;
-	    int kr = screen->cur_col;
-	    if (DamagedCurCells(screen, n, &kl, (int *) 0) && kr > kl) {
-		ClearInLine(xw, screen->cur_row, kl, (unsigned) (kr - kl + 1));
-	    }
-	    kr = screen->max_col - (int) n + 1;
-	    if (DamagedCells(screen, n, &kl, (int *) 0,
-			     screen->cur_row,
-			     kr) && kr > kl) {
-		ClearInLine(xw, screen->cur_row, kl, (unsigned) (kr - kl + 1));
-	    }
-	});
-
-	/*
 	 * prevent InsertChar from shifting the end of a line over
 	 * if it is being appended to
 	 */
@@ -1145,17 +1115,6 @@ DeleteChar(XtermWidget xw, unsigned n)
     if (AddToVisible(xw)
 	&& (ld = getLineData(screen, screen->cur_row)) != 0) {
 	int col = right + 1 - (int) n;
-
-	/*
-	 * If we delete part of a multi-column character, fill the rest
-	 * of it with blanks.
-	 */
-	if_OPT_WIDE_CHARS(screen, {
-	    int kl;
-	    int kr;
-	    if (DamagedCurCells(screen, n, &kl, &kr))
-		ClearInLine(xw, screen->cur_row, kl, (unsigned) (kr - kl + 1));
-	});
 
 	horizontal_copy_area(xw,
 			     (screen->cur_col + (int) n),
@@ -1395,23 +1354,6 @@ ClearRight(XtermWidget xw, int n)
 
     ld = getLineData(screen, screen->cur_row);
     if (AddToVisible(xw)) {
-	if_OPT_WIDE_CHARS(screen, {
-	    int col = screen->cur_col;
-	    int row = screen->cur_row;
-	    int kl;
-	    int kr;
-	    int xx;
-	    if (DamagedCurCells(screen, len, &kl, &kr) && kr >= kl) {
-		xx = col;
-		if (kl < xx) {
-		    ClearInLine2(xw, 0, row, kl, (unsigned) (xx - kl));
-		}
-		xx = col + (int) len - 1;
-		if (kr > xx) {
-		    ClearInLine2(xw, 0, row, xx + 1, (unsigned) (kr - xx));
-		}
-	    }
-	});
 	(void) ClearInLine(xw, screen->cur_row, screen->cur_col, len);
     } else {
 	ScrnClearCells(xw, screen->cur_row, screen->cur_col, len);
@@ -1436,14 +1378,6 @@ ClearLeft(XtermWidget xw)
 
     assert(screen->cur_col >= 0);
     if (AddToVisible(xw)) {
-	if_OPT_WIDE_CHARS(screen, {
-	    int row = screen->cur_row;
-	    int kl;
-	    int kr;
-	    if (DamagedCurCells(screen, 1, &kl, &kr) && kr >= kl) {
-		ClearInLine2(xw, 0, row, kl, (unsigned) (kr - kl + 1));
-	    }
-	});
 	(void) ClearInLine(xw, screen->cur_row, 0, len);
     } else {
 	ScrnClearCells(xw, screen->cur_row, 0, len);
@@ -2143,10 +2077,6 @@ ReverseVideo(XtermWidget xw)
      */
 #define swapAnyColor(name,a,b) swapLocally(listToSwap, &numToSwap, &(screen->name[a]), &(screen->name[b]) hc_value)
 #define swapAColor(a,b) swapAnyColor(Acolors, a, b)
-    if_OPT_ISO_COLORS(screen, {
-	swapAColor(0, 7);
-	swapAColor(8, 15);
-    });
 
     if (T_COLOR(screen, TEXT_CURSOR) == T_COLOR(screen, TEXT_FG))
 	T_COLOR(screen, TEXT_CURSOR) = T_COLOR(screen, TEXT_BG);
@@ -2349,17 +2279,9 @@ drawXtermText(XtermWidget xw,
 	while (len--) {
 	    int cells = WideCells(*text);
 	    {
-		if_WIDE_OR_NARROW(screen, {
-		    XChar2b temp[1];
-		    temp[0].byte2 = LO_BYTE(*text);
-		    temp[0].byte1 = HI_BYTE(*text);
-		    width = XTextWidth16(curFont->fs, temp, 1);
-		}
-		, {
 		    char temp[1];
 		    temp[0] = (char) LO_BYTE(*text);
 		    width = XTextWidth(curFont->fs, temp, 1);
-		});
 		adj = (FontWidth(screen) - width) / 2;
 		if (adj < 0)
 		    adj = 0;
@@ -2381,13 +2303,6 @@ drawXtermText(XtermWidget xw,
      */
 #define AttrFlags() (attr_flags & DRAWX_MASK)
 #define DrawFlags() (draw_flags & ~DRAWX_MASK)
-    TRACE(("drawtext%c[%4d,%4d] {%#x,%#x} (%d) %d:%s\n",
-	   screen->cursor_state == OFF ? ' ' : '*',
-	   y, x,
-	   AttrFlags(),
-	   DrawFlags(),
-	   chrset, len,
-	   visibleIChars(text, len)));
     if (screen->scale_height != 1.0) {
 	xtermFillCells(xw, draw_flags, gc, x, y, (Cardinal) len);
     }
@@ -2588,12 +2503,6 @@ putXtermCell(TScreen *screen, int row, int col, int ch)
 
     if (ld && (col < (int) ld->lineSize)) {
 	ld->charData[col] = (CharData) ch;
-	if_OPT_WIDE_CHARS(screen, {
-	    size_t off;
-	    for_each_combData(off, ld) {
-		ld->combData[off][col] = 0;
-	    }
-	});
     }
 }
 
